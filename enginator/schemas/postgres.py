@@ -9,7 +9,7 @@ from sqlalchemy.engine import Engine, create_engine
 from sqlalchemy.engine.url import URL
 from sqlalchemy.event import listens_for
 
-from sqlalchemy_url_builder.schemas.base import BaseSchema
+from enginator.schemas.base import BaseSchema
 
 
 class PostgresDriver(StrEnum):

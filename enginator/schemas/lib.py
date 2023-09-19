@@ -5,8 +5,8 @@ from apispec import APISpec
 from apispec.ext.marshmallow import MarshmallowPlugin
 from sqlalchemy.engine import Engine
 
-from sqlalchemy_url_builder import __version__
-from sqlalchemy_url_builder.schemas.base import BaseSchema
+from enginator import __version__
+from enginator.schemas.base import BaseSchema
 
 
 
