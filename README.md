@@ -1,9 +1,9 @@
-# sqlalchemy-url-builder
+# enginator
 
-A library that helps building URLs for SQLAlchemy engines:
+A library that helps creating SQLAlchemy engines:
 
 ```python
-from sqlalchemy_url_builder.schemas import PostgresSchema
+from enginator.schemas import PostgresSchema
 
 
 data = {
