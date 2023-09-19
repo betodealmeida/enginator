@@ -39,6 +39,7 @@ class PostgresSchema(BaseSchema):
         PostgresDriver,
         required=False,
         load_default=PostgresDriver.psycopg2,
+        metadata={"description": "Database driver."},
     )
 
     # can we group these?

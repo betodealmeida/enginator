@@ -1,3 +1,4 @@
+from enum import StrEnum
 from typing import Any
 
 from marshmallow import Schema, fields, post_load
@@ -5,6 +6,14 @@ from sqlalchemy.engine import Engine, create_engine
 from sqlalchemy.engine.url import URL
 
 from enginator.schemas.base import BaseSchema
+
+
+class GSheetsDriver(StrEnum):
+    """
+    Google Sheets drivers.
+    """
+
+    apsw = "apsw"
 
 
 class GoogleServiceAccountInfoSchema(Schema):
@@ -34,7 +43,12 @@ class GSheetsSchema(BaseSchema):
     name = "Google Sheets"
 
     engine = fields.Constant("gsheets")
-    driver = fields.Constant("apsw")
+    driver = fields.Enum(
+        GSheetsDriver,
+        required=False,
+        load_default=GSheetsDriver.apsw,
+        metadata={"description": "Database driver."},
+    )
 
     # auth
     access_token = fields.String(
@@ -53,6 +67,20 @@ class GSheetsSchema(BaseSchema):
 
     subject = fields.String(required=False)
     app_default_credentials = fields.Boolean(required=False)
+
+    @staticmethod
+    def get_catalogs(engine: Engine) -> list[str]:
+        """
+        Get the list of catalogs.
+        """
+        return []
+
+    @staticmethod
+    def get_namespaces(engine: Engine) -> list[str]:
+        """
+        Get the list of namespaces.
+        """
+        return ["main"]
 
     @classmethod
     def match(cls, engine: str, driver: str | None = None) -> bool:
