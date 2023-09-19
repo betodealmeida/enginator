@@ -17,7 +17,7 @@ We use the following terminology in this project:
 | database  | cluster  | ?        | ?        | ?       |
 | catalog   | database | N/A      | project  | catalog |
 | namespace | schema   | database | schema   | schema  |
-| table     | table    | table    | table    | table   |
+| table     | table    | table    | dataset  | table   |
 | column    | column   | column   | column   | column  |
 
 ## Usage
