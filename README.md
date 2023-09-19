@@ -18,7 +18,7 @@ We use the following terminology in this project:
 | catalog   | database | N/A      | project  | catalog |
 | namespace | schema   | database | schema   | schema  |
 | table     | table    | table    | table    | table   |
-| column    | column   | column   | column   | column  }
+| column    | column   | column   | column   | column  |
 
 ## Usage
 
