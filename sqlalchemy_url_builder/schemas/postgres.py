@@ -1,87 +1,15 @@
-import inspect
 import re
 import ssl
 from enum import StrEnum
 from typing import Any
 
-from apispec import APISpec
-from apispec.ext.marshmallow import MarshmallowPlugin
-from marshmallow import Schema, fields, post_load, validates_schema, ValidationError
+from marshmallow import fields, post_load, validates_schema, ValidationError
 from marshmallow.validate import Range
 from sqlalchemy.engine import Engine, create_engine
 from sqlalchemy.engine.url import URL
 from sqlalchemy.event import listens_for
 
-from sqlalchemy_url_builder import __version__
-
-
-class BaseSchema(Schema):
-    name: str
-
-    # Basic attributes that every DB schema should have.
-    engine = fields.String(
-        required=True,
-        metadata={"description": "SQLAlchemy engine."},
-    )
-    driver = fields.String(
-        required=True,
-        metadata={"description": "SQLAlchemy driver."},
-    )
-
-    # Different databases use different names for the organizational hierarchies. For
-    # example, a Postgres "database" is a Presto "catalog" and a BigQuery "project";
-    # a Postgres "schema" is a MySQL "database". The base class provides a standard
-    # nomenclature for this as:
-    #
-    #     database => catalog => namespace => table => column
-    #
-    # When instantiating engines users can use either the standard name or the
-    # database specific one.
-    catalog = fields.String(
-        required=False,
-        allow_none=True,
-        load_default=None,
-        metadata={
-            "description": (
-                "The catalog name, also often called a database (Postgres, eg) or "
-                "project (BigQuery, eg)"
-            ),
-        },
-    )
-    namespace = fields.String(
-        required=False,
-        allow_none=True,
-        load_default=None,
-        metadata={
-            "description": (
-                "The namespace name, also often called a schema (Postgres, eg) or "
-                "database (MySQL, eg)"
-            ),
-        },
-    )
-
-    @classmethod
-    def match(cls, engine: str, driver: str | None = None) -> bool:
-        """
-        Does the schema handle a given `engine[:driver]`?
-        """
-        return False
-
-    def get_engine(
-        self,
-        catalog: str | None = None,
-        namespace: str | None = None,
-        **kwargs: Any,
-    ) -> Engine:
-        """
-        Return the engine optionally configured for a given catalog and namespace.
-        """
-        if catalog:
-            kwargs["catalog"] = catalog
-        if namespace:
-            kwargs["namespace"] = namespace
-
-        return self.load(data=kwargs)
+from sqlalchemy_url_builder.schemas.base import BaseSchema
 
 
 class PostgresDriver(StrEnum):
@@ -227,107 +155,3 @@ class PostgresSchema(BaseSchema):
                     )
 
         return engine
-
-
-class GoogleServiceAccountInfoSchema(Schema):
-    """
-    Information about a Google service account.
-    """
-
-    type = fields.Constant("service_account")
-    project_id = fields.String(required=True)
-    private_key_id = fields.String(required=True)
-    private_key = fields.String(required=True)
-    client_email = fields.Email(required=True)
-    client_id = fields.String(required=True)
-    auth_uri = fields.Url(required=True)
-    token_uri = fields.Url(required=True)
-    auth_provider_x509_cert_url = fields.Url(required=True)
-    client_x509_cert_url = fields.Url(required=True)
-
-
-class GSheetsSchema(BaseSchema):
-    """
-    Google Sheets schema.
-
-    The pseudo-database takes no arguments other than the authentication information.
-    """
-
-    name = "Google Sheets"
-
-    engine = fields.Constant("gsheets")
-    driver = fields.Constant("apsw")
-
-    # auth
-    access_token = fields.String(
-        required=False,
-        metadata={"description": "OAuth2 access token."},
-    )
-    service_account_file = fields.String(
-        required=False,
-        metadata={"description": "Path to service account JSON file."},
-    )
-    service_account_info = fields.Nested(
-        GoogleServiceAccountInfoSchema,
-        required=False,
-        metadata={"description": "Contents of service account JSON file."},
-    )
-
-    subject = fields.String(required=False)
-    app_default_credentials = fields.Boolean(required=False)
-
-    @classmethod
-    def match(cls, engine: str, driver: str | None = None) -> bool:
-        return engine == "gsheets" and (driver is None or driver == "apsw")
-
-    @post_load
-    def make_engine(self, data: dict[str, Any], **kwargs: Any) -> Engine:
-        """
-        Build the SQLAlchemy engine.
-        """
-        parameters = {
-            k: v
-            for k, v in data.items()
-            if k not in {"engine", "driver", "catalog", "namespace"}
-        }
-        url = URL(
-            drivername="{engine}+{driver}".format(**data),
-            username=None,
-            password=None,
-            host=None,
-            port=None,
-            database=None,
-            query=None,
-        )
-
-        return create_engine(url, **parameters)
-
-
-def build_spec() -> APISpec:
-    """
-    Build the OpenAPI spec.
-    """
-    spec = APISpec(
-        title="SQLAlchemy URL Builder",
-        version=__version__,
-        openapi_version="3.0.2",
-        plugins=[MarshmallowPlugin()],
-    )
-
-    for obj in globals().copy().values():
-        if inspect.isclass(obj) and issubclass(obj, Schema) and obj != BaseSchema:
-            spec.components.schema(obj.__name__, schema=obj)
-
-    return spec
-
-
-def get_engine(data: dict[str, Any]) -> Engine:
-    """
-    Return an engine given a raw payload.
-    """
-
-
-if __name__ == "__main__":
-    import json
-
-    print(json.dumps(build_spec().to_dict()))
