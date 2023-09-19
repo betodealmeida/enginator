@@ -8,6 +8,7 @@ from marshmallow.validate import Range
 from sqlalchemy.engine import Engine, create_engine
 from sqlalchemy.engine.url import URL
 from sqlalchemy.event import listens_for
+from sqlalchemy.sql import text
 
 from enginator.schemas.base import BaseSchema
 
@@ -71,6 +72,32 @@ class PostgresSchema(BaseSchema):
         load_default=False,
         metadata={"description": "Allow self-signed certificates."},
     )
+
+    @staticmethod
+    def get_catalogs(engine: Engine) -> list[str]:
+        """
+        Return a list of databases.
+        """
+        with engine.connect() as connection:
+            return sorted(
+                catalog
+                for (catalog,) in connection.execute(
+                    text("SELECT datname FROM pg_database WHERE datistemplate = false;")
+                )
+            )
+
+    @staticmethod
+    def get_namespaces(engine: Engine) -> list[str]:
+        """
+        Return a list of schemas.
+        """
+        with engine.connect() as connection:
+            return sorted(
+                schema
+                for (schema,) in connection.execute(
+                    text("SELECT schema_name FROM information_schema.schemata;")
+                )
+            )
 
     @classmethod
     def match(cls, engine: str, driver: str | None = None) -> bool:
