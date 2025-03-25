@@ -1,4 +1,3 @@
-import re
 import ssl
 from enum import StrEnum
 from typing import Any
@@ -10,7 +9,43 @@ from sqlalchemy.engine.url import URL
 from sqlalchemy.event import listens_for
 from sqlalchemy.sql import text
 
+from enginator.lib import get_settings
 from enginator.schemas.base import BaseSchema
+
+
+def build_ssl_value(data: dict[str, Any]) -> str:
+    """
+    Build the SSL configuration for the connection.
+    """
+    require_ssl = data.get("require_ssl", True)
+    allow_self_signed_certificates = data.get("allow_self_signed_certificates", False)
+    disable_hostname_checking = data.get("disable_hostname_checking", False)
+
+    if not require_ssl:
+        return "prefer"
+
+    if allow_self_signed_certificates:
+        return "require"
+
+    if disable_hostname_checking:
+        return "verify-ca"
+
+    return "verify-full"
+
+
+def build_ssl_context(data: dict[str, Any]) -> ssl.SSLContext:
+    """
+    Build the SSL context for the connection.
+    """
+    ssl_context = ssl.create_default_context()
+
+    if data.get("disable_hostname_checking"):
+        ssl_context.check_hostname = False
+
+    if data.get("allow_self_signed_certificates"):
+        ssl_context.verify_mode = ssl.CERT_NONE
+
+    return ssl_context
 
 
 class PostgresDriver(StrEnum):
@@ -34,44 +69,52 @@ class PostgresSchema(BaseSchema):
 
     name = "PostgreSQL"
 
-    engine = fields.Constant("postgresql")
+    engine = fields.Constant(
+        "postgresql",
+        metadata={
+            "description": "Engine name",
+            "type": "string",
+            "x-ui-schema": {"ui:readonly": True},
+        },
+    )
     driver = fields.Enum(
         PostgresDriver,
         required=False,
         load_default=PostgresDriver.psycopg2,
-        metadata={"description": "Database driver."},
+        metadata={"description": "Database driver"},
     )
 
-    # can we group these?
-    username = fields.String(required=False, metadata={"description": "Username."})
-    password = fields.String(required=False, metadata={"description": "Password."})
+    username = fields.String(required=False, metadata={"description": "Username"})
+    password = fields.String(required=False, metadata={"description": "Password"})
     host = fields.String(
         required=True,
-        metadata={"description": "Hostname or IP address."},
+        metadata={"description": "Hostname or IP address"},
     )
     port = fields.Integer(
         required=False,
         load_default=5432,
         validate=Range(min=0, max=2**16, max_inclusive=False),
-        metadata={"description": "Port number."},
+        metadata={"description": "Port number"},
     )
-    database = fields.String(required=False, metadata={"description": "Database name."})
+    database = fields.String(required=False, metadata={"description": "Database name"})
 
-    # can we group these?
-    ssl = fields.Boolean(
+    require_ssl = fields.Boolean(
         required=False,
         load_default=True,
-        metadata={"description": "Use SSL."},
+        metadata={
+            "description": "Require SSL for the connection",
+            "title": "Require SSL",
+        },
     )
     disable_hostname_checking = fields.Boolean(
         required=False,
         load_default=False,
-        metadata={"description": "Disable hostname checking."},
+        metadata={"description": "Disable hostname checking"},
     )
     allow_self_signed_certificates = fields.Boolean(
         required=False,
         load_default=False,
-        metadata={"description": "Allow self-signed certificates."},
+        metadata={"description": "Allow self-signed certificates"},
     )
 
     @staticmethod
@@ -106,37 +149,25 @@ class PostgresSchema(BaseSchema):
             driver is None or driver in PostgresDriver.__members__.values()
         )
 
-    @validates_schema
-    def validate_ssl(self, data: dict[str, Any], **kwargs: Any) -> None:
-        """
-        Make sure we can enable SSL.
-        """
-        # XXX
-        if data.get("ssl") and data["driver"] not in {
-            PostgresDriver.psycopg2,
-            PostgresDriver.pg8000,
-        }:
-            raise ValidationError("SSL is only supported with psycopg2 and pg8000.")
-
     @post_load
     def make_engine(self, data: dict[str, Any], **kwargs: Any) -> Engine:
         """
         Build the SQLAlchemy engine.
         """
         parameters = {}
-
         query = {}
-        if data.get("ssl"):
-            # XXX
-            if data["driver"] == PostgresDriver.psycopg2:
-                query["sslmode"] = "require"
+
+        if data.get("require_ssl"):
+            if data["driver"] == PostgresDriver.asyncpg:
+                parameters["connect_args"] = {"ssl": build_ssl_context(data)}
+            elif data["driver"] in {
+                PostgresDriver.psycopg,
+                PostgresDriver.psycopg2,
+                PostgresDriver.psycopg2cffi,
+            }:
+                query["sslmode"] = build_ssl_value(data)
             elif data["driver"] == PostgresDriver.pg8000:
-                ssl_context = ssl.create_default_context()
-                if data.get("disable_hostname_checking"):
-                    ssl_context.check_hostname = False
-                if data.get("allow_self_signed_certificates"):
-                    ssl_context.verify_mode = ssl.CERT_NONE
-                parameters["connect_args"] = {"ssl_context": ssl_context}
+                parameters["connect_args"] = {"ssl_context": build_ssl_context(data)}
 
         url = URL(
             drivername="{engine}+{driver}".format(**data),
@@ -171,15 +202,18 @@ class PostgresSchema(BaseSchema):
             ) -> None:
                 r"""
                 Check for statements altering the default namespace.
-
-                We use a rather aggressive regular expression to check for statements
-                that modify the search path. Ideally we'd strip comments and check for
-                `set\s+search_path\s*=`, or even better, parse the query and analyze it.
                 """
-                if re.search("search_path", statement, re.IGNORECASE):
+                settings = get_settings(statement, data["engine"])
+                search_path = settings.get("search_path")
+
+                if not search_path:
+                    return
+
+                if search_path.strip('"') != namespace:
                     raise Exception(
-                        "Queries modifying search_path are not allowed for security "
-                        "reasons."
+                        "Queries modifying `search_path` are not allowed since a "
+                        "default namespace has been set. Please use fully qualified "
+                        "names or change the default namespace for the connection."
                     )
 
         return engine

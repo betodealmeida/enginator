@@ -47,22 +47,22 @@ class GSheetsSchema(BaseSchema):
         GSheetsDriver,
         required=False,
         load_default=GSheetsDriver.apsw,
-        metadata={"description": "Database driver."},
+        metadata={"description": "Database driver"},
     )
 
     # auth
     access_token = fields.String(
         required=False,
-        metadata={"description": "OAuth2 access token."},
+        metadata={"description": "OAuth2 access token"},
     )
     service_account_file = fields.String(
         required=False,
-        metadata={"description": "Path to service account JSON file."},
+        metadata={"description": "Path to service account JSON file"},
     )
     service_account_info = fields.Nested(
         GoogleServiceAccountInfoSchema,
         required=False,
-        metadata={"description": "Contents of service account JSON file."},
+        metadata={"description": "Contents of service account JSON file"},
     )
 
     subject = fields.String(required=False)
@@ -71,14 +71,14 @@ class GSheetsSchema(BaseSchema):
     @staticmethod
     def get_catalogs(engine: Engine) -> list[str]:
         """
-        Get the list of catalogs.
+        Return a list of catalogs available in the engine.
         """
         return []
 
     @staticmethod
     def get_namespaces(engine: Engine) -> list[str]:
         """
-        Get the list of namespaces.
+        Return a list of namespaces available in the engine.
         """
         return ["main"]
 
