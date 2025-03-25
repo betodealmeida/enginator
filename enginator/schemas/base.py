@@ -32,8 +32,8 @@ class BaseSchema(Schema):
         load_default=None,
         metadata={
             "description": (
-                "The catalog name, also often called a database (Postgres, eg) or "
-                "project (BigQuery, eg)"
+                "The catalog name, also often called a database (Postgres) or project "
+                "(BigQuery)."
             ),
         },
     )
@@ -43,8 +43,8 @@ class BaseSchema(Schema):
         load_default=None,
         metadata={
             "description": (
-                "The namespace name, also often called a schema (Postgres, eg) or "
-                "database (MySQL, eg)"
+                "The namespace name, also often called a schema (Postgres and most "
+                "databases) or database (MySQL)."
             ),
         },
     )
@@ -55,6 +55,20 @@ class BaseSchema(Schema):
         Does the schema handle a given `engine[:driver]`?
         """
         return False
+
+    @staticmethod
+    def get_catalogs(engine: Engine) -> list[str]:
+        """
+        Return a list of catalogs available in the engine.
+        """
+        raise NotImplementedError("Subclasses must implement this method.")
+
+    @staticmethod
+    def get_namespaces(engine: Engine) -> list[str]:
+        """
+        Return a list of namespaces available in the engine.
+        """
+        raise NotImplementedError("Subclasses must implement this method.")
 
     def get_engine(
         self,
