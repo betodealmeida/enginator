@@ -1,3 +1,7 @@
+"""
+Google Sheets engine schema.
+"""
+
 from enum import StrEnum
 from typing import Any
 
@@ -13,7 +17,7 @@ class GSheetsDriver(StrEnum):
     Google Sheets drivers.
     """
 
-    apsw = "apsw"
+    APSW = "apsw"
 
 
 class GoogleServiceAccountInfoSchema(Schema):
@@ -42,11 +46,18 @@ class GSheetsSchema(BaseSchema):
 
     name = "Google Sheets"
 
-    engine = fields.Constant("gsheets")
+    engine = fields.Constant(
+        "gsheets",
+        metadata={
+            "description": "Engine name",
+            "type": "string",
+            "x-ui-schema": {"ui:readonly": True},
+        },
+    )
     driver = fields.Enum(
         GSheetsDriver,
         required=False,
-        load_default=GSheetsDriver.apsw,
+        load_default=GSheetsDriver.APSW,
         metadata={"description": "Database driver"},
     )
 
@@ -87,7 +98,11 @@ class GSheetsSchema(BaseSchema):
         return engine == "gsheets" and (driver is None or driver == "apsw")
 
     @post_load
-    def make_engine(self, data: dict[str, Any], **kwargs: Any) -> Engine:
+    def make_engine(  # pylint: disable=unused-argument
+        self,
+        data: dict[str, Any],
+        **kwargs: Any,
+    ) -> Engine:
         """
         Build the SQLAlchemy engine.
         """
@@ -97,7 +112,7 @@ class GSheetsSchema(BaseSchema):
             if k not in {"engine", "driver", "catalog", "namespace"}
         }
         url = URL(
-            drivername="{engine}+{driver}".format(**data),
+            drivername=f"{data['engine']}+{data['driver']}",
             username=None,
             password=None,
             host=None,

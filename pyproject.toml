@@ -23,7 +23,7 @@ Issues = "https://github.com/betodealmeida/enginator/issues"
 CI = "https://github.com/betodealmeida/enginator/actions"
 
 [project.optional-dependencies]
-test = ["pytest"]
+test = ["pytest", "pre-commit"]
 development = ["Flake8-pyproject"]
 
 [project.entry-points."enginator.schemas"]

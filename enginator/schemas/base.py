@@ -1,11 +1,21 @@
+"""
+Base class for engine schemas.
+"""
+
 from typing import Any
 
-from marshmallow import Schema, fields
+from marshmallow import Schema, fields, pre_load
 from sqlalchemy.engine import Engine
 
 
 class BaseSchema(Schema):
+    """
+    Base class for engine schemas.
+    """
+
     name: str
+
+    hierarchy_map: dict[str, str] = {}
 
     # Basic attributes that every DB schema should have.
     engine = fields.String(
@@ -49,12 +59,26 @@ class BaseSchema(Schema):
         },
     )
 
+    @pre_load
+    def handle_specific_names(
+        self,
+        data: dict[str, Any],
+    ) -> dict[str, Any]:
+        """
+        Handle specific names for catalogs and namespaces.
+        """
+        for standard_name, native_name in self.hierarchy_map.items():
+            if native_name in data:
+                data[standard_name] = data.pop(native_name)
+
+        return data
+
     @classmethod
     def match(cls, engine: str, driver: str | None = None) -> bool:
         """
         Does the schema handle a given `engine[:driver]`?
         """
-        return False
+        raise NotImplementedError("Subclasses must implement this method.")
 
     @staticmethod
     def get_catalogs(engine: Engine) -> list[str]:

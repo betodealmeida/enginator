@@ -1,12 +1,18 @@
+"""
+PostgreSQL engine schema.
+"""
+
 import ssl
 from enum import StrEnum
 from typing import Any
 
-from marshmallow import fields, post_load, validates_schema, ValidationError
+from marshmallow import fields, post_load
 from marshmallow.validate import Range
-from sqlalchemy.engine import Engine, create_engine
+from sqlalchemy.engine import Connection, Engine, create_engine
 from sqlalchemy.engine.url import URL
 from sqlalchemy.event import listens_for
+from sqlalchemy.exc import ProgrammingError
+from sqlalchemy.pool import _ConnectionRecord
 from sqlalchemy.sql import text
 
 from enginator.lib import get_settings
@@ -39,8 +45,7 @@ def build_ssl_context(data: dict[str, Any]) -> ssl.SSLContext:
     """
     ssl_context = ssl.create_default_context()
 
-    if data.get("disable_hostname_checking"):
-        ssl_context.check_hostname = False
+    ssl_context.check_hostname = not data.get("disable_hostname_checking")
 
     if data.get("allow_self_signed_certificates"):
         ssl_context.verify_mode = ssl.CERT_NONE
@@ -55,11 +60,11 @@ class PostgresDriver(StrEnum):
     Different drivers have different validation.
     """
 
-    psycopg2 = "psycopg2"
-    psycopg = "psycopg"
-    pg8000 = "pg8000"
-    asyncpg = "asyncpg"
-    psycopg2cffi = "psycopg2cffi"
+    PSYCOPG2 = "psycopg2"
+    PSYCOPG = "psycopg"
+    PG8000 = "pg8000"
+    ASYNCPG = "asyncpg"
+    PSYCOPG2CFFI = "psycopg2cffi"
 
 
 class PostgresSchema(BaseSchema):
@@ -68,6 +73,11 @@ class PostgresSchema(BaseSchema):
     """
 
     name = "PostgreSQL"
+
+    hierarchy_map = {
+        "catalog": "database",
+        "namespace": "schema",
+    }
 
     engine = fields.Constant(
         "postgresql",
@@ -80,7 +90,7 @@ class PostgresSchema(BaseSchema):
     driver = fields.Enum(
         PostgresDriver,
         required=False,
-        load_default=PostgresDriver.psycopg2,
+        load_default=PostgresDriver.PSYCOPG2,
         metadata={"description": "Database driver"},
     )
 
@@ -126,7 +136,9 @@ class PostgresSchema(BaseSchema):
             return sorted(
                 catalog
                 for (catalog,) in connection.execute(
-                    text("SELECT datname FROM pg_database WHERE datistemplate = false;")
+                    text(
+                        "SELECT datname FROM pg_database WHERE datistemplate = false;",
+                    ),
                 )
             )
 
@@ -139,7 +151,7 @@ class PostgresSchema(BaseSchema):
             return sorted(
                 schema
                 for (schema,) in connection.execute(
-                    text("SELECT schema_name FROM information_schema.schemata;")
+                    text("SELECT schema_name FROM information_schema.schemata;"),
                 )
             )
 
@@ -150,7 +162,11 @@ class PostgresSchema(BaseSchema):
         )
 
     @post_load
-    def make_engine(self, data: dict[str, Any], **kwargs: Any) -> Engine:
+    def make_engine(  # pylint: disable=unused-argument
+        self,
+        data: dict[str, Any],
+        **kwargs: Any,
+    ) -> Engine:
         """
         Build the SQLAlchemy engine.
         """
@@ -158,19 +174,19 @@ class PostgresSchema(BaseSchema):
         query = {}
 
         if data.get("require_ssl"):
-            if data["driver"] == PostgresDriver.asyncpg:
+            if data["driver"] == PostgresDriver.ASYNCPG:
                 parameters["connect_args"] = {"ssl": build_ssl_context(data)}
             elif data["driver"] in {
-                PostgresDriver.psycopg,
-                PostgresDriver.psycopg2,
-                PostgresDriver.psycopg2cffi,
+                PostgresDriver.PSYCOPG,
+                PostgresDriver.PSYCOPG2,
+                PostgresDriver.PSYCOPG2CFFI,
             }:
                 query["sslmode"] = build_ssl_value(data)
-            elif data["driver"] == PostgresDriver.pg8000:
+            elif data["driver"] == PostgresDriver.PG8000:
                 parameters["connect_args"] = {"ssl_context": build_ssl_context(data)}
 
         url = URL(
-            drivername="{engine}+{driver}".format(**data),
+            drivername=f"{data['engine']}+{data['driver']}",
             username=data.get("username"),
             password=data.get("password"),
             host=data["host"],
@@ -184,7 +200,10 @@ class PostgresSchema(BaseSchema):
         if namespace := data.get("namespace"):
 
             @listens_for(engine, "connect")
-            def set_namespace(dbapi_con, connection_record) -> None:
+            def set_namespace(  # pylint: disable=unused-argument
+                dbapi_con: Any,
+                connection_record: _ConnectionRecord,
+            ) -> None:
                 """
                 Set the default namespace.
                 """
@@ -192,13 +211,13 @@ class PostgresSchema(BaseSchema):
                 cursor.execute(f'set search_path = "{namespace}"')
 
             @listens_for(engine, "before_cursor_execute")
-            def disallow_namespace_change(
-                conn,
-                cursor,
-                statement,
-                parameters,
-                context,
-                executemany,
+            def disallow_namespace_change(  # pylint: disable=too-many-arguments,too-many-positional-arguments,unused-argument
+                conn: Connection,
+                cursor: Any,
+                statement: str,
+                parameters: Any,
+                context: Any,
+                executemany: bool,
             ) -> None:
                 r"""
                 Check for statements altering the default namespace.
@@ -209,11 +228,13 @@ class PostgresSchema(BaseSchema):
                 if not search_path:
                     return
 
-                if search_path.strip('"') != namespace:
-                    raise Exception(
+                if isinstance(search_path, str) and search_path.strip('"') != namespace:
+                    raise ProgrammingError(
+                        statement,
+                        parameters,
                         "Queries modifying `search_path` are not allowed since a "
                         "default namespace has been set. Please use fully qualified "
-                        "names or change the default namespace for the connection."
+                        "names or change the default namespace for the connection.",
                     )
 
         return engine

@@ -1,4 +1,7 @@
-import inspect
+"""
+Helper functions.
+"""
+
 from importlib.metadata import entry_points
 from typing import Any
 
@@ -29,7 +32,7 @@ def build_spec() -> APISpec:
             klass = ep.load()
             schema = klass()
             spec.components.schema(klass.__name__, schema=schema)
-        except Exception:
+        except Exception:  # pylint: disable=broad-except
             pass
 
     return spec
@@ -50,7 +53,7 @@ def get_engine(data: dict[str, Any]) -> Engine:
             klass = ep.load()
             if klass.match(engine, driver):
                 return klass.get_engine(**data)
-        except Exception:
+        except Exception:  # pylint: disable=broad-except
             pass
 
     raise ValueError("No schema found for this engine.")
