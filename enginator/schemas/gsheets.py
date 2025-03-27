@@ -1,7 +1,11 @@
+"""
+Google Sheets engine schema.
+"""
+
 from enum import StrEnum
 from typing import Any
 
-from marshmallow import Schema, fields, post_load
+from marshmallow import Schema, fields
 from sqlalchemy.engine import Engine, create_engine
 from sqlalchemy.engine.url import URL
 
@@ -13,7 +17,7 @@ class GSheetsDriver(StrEnum):
     Google Sheets drivers.
     """
 
-    apsw = "apsw"
+    apsw = "apsw"  # pylint: disable=invalid-name
 
 
 class GoogleServiceAccountInfoSchema(Schema):
@@ -42,7 +46,14 @@ class GSheetsSchema(BaseSchema):
 
     name = "Google Sheets"
 
-    engine = fields.Constant("gsheets")
+    engine = fields.Constant(
+        "gsheets",
+        metadata={
+            "description": "Engine name",
+            "type": "string",
+            "x-ui-schema": {"ui:readonly": True},
+        },
+    )
     driver = fields.Enum(
         GSheetsDriver,
         required=False,
@@ -69,25 +80,28 @@ class GSheetsSchema(BaseSchema):
     app_default_credentials = fields.Boolean(required=False)
 
     @staticmethod
-    def get_catalogs(engine: Engine) -> list[str]:
+    def get_catalogs(engine: Engine) -> set[str]:
         """
         Return a list of catalogs available in the engine.
         """
-        return []
+        return set()
 
     @staticmethod
-    def get_namespaces(engine: Engine) -> list[str]:
+    def get_namespaces(engine: Engine) -> set[str]:
         """
         Return a list of namespaces available in the engine.
         """
-        return ["main"]
+        return {"main"}
 
     @classmethod
     def match(cls, engine: str, driver: str | None = None) -> bool:
         return engine == "gsheets" and (driver is None or driver == "apsw")
 
-    @post_load
-    def make_engine(self, data: dict[str, Any], **kwargs: Any) -> Engine:
+    def make_engine(  # pylint: disable=unused-argument
+        self,
+        data: dict[str, Any],
+        **kwargs: Any,
+    ) -> Engine:
         """
         Build the SQLAlchemy engine.
         """
@@ -97,13 +111,13 @@ class GSheetsSchema(BaseSchema):
             if k not in {"engine", "driver", "catalog", "namespace"}
         }
         url = URL(
-            drivername="{engine}+{driver}".format(**data),
+            drivername=f"{data['engine']}+{data['driver']}",
             username=None,
             password=None,
             host=None,
             port=None,
             database=None,
-            query=None,
+            query={},
         )
 
         return create_engine(url, **parameters)

@@ -1,11 +1,22 @@
+"""
+Base class for engine schemas.
+"""
+
 from typing import Any
 
-from marshmallow import Schema, fields
+from marshmallow import Schema, fields, post_load, pre_load
+from sqlalchemy import inspect
 from sqlalchemy.engine import Engine
 
 
 class BaseSchema(Schema):
+    """
+    Base class for engine schemas.
+    """
+
     name: str
+
+    hierarchy_map: dict[str, str] = {}
 
     # Basic attributes that every DB schema should have.
     engine = fields.String(
@@ -25,7 +36,7 @@ class BaseSchema(Schema):
     #     database => catalog => namespace => table => column
     #
     # When instantiating engines users can use either the standard name or the
-    # database specific one.
+    # database specific one (via the `hierarchy_map` class attribute).
     catalog = fields.String(
         required=False,
         allow_none=True,
@@ -49,39 +60,62 @@ class BaseSchema(Schema):
         },
     )
 
+    @pre_load
+    def handle_specific_names(  # pylint: disable=unused-argument
+        self,
+        data: dict[str, Any],
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        """
+        Handle specific names for catalogs and namespaces.
+        """
+        for standard_name, native_name in self.hierarchy_map.items():
+            if native_name in data:
+                data[standard_name] = data.pop(native_name)
+
+        return data
+
     @classmethod
     def match(cls, engine: str, driver: str | None = None) -> bool:
         """
         Does the schema handle a given `engine[:driver]`?
         """
-        return False
+        raise NotImplementedError("Subclasses must implement this method.")
 
     @staticmethod
-    def get_catalogs(engine: Engine) -> list[str]:
+    def get_catalogs(engine: Engine) -> set[str]:
         """
         Return a list of catalogs available in the engine.
         """
         raise NotImplementedError("Subclasses must implement this method.")
 
     @staticmethod
-    def get_namespaces(engine: Engine) -> list[str]:
+    def get_namespaces(engine: Engine) -> set[str]:
         """
         Return a list of namespaces available in the engine.
         """
-        raise NotImplementedError("Subclasses must implement this method.")
+        inspector = inspect(engine)
+        return set(inspector.get_schema_names())
 
-    def get_engine(
-        self,
-        catalog: str | None = None,
-        namespace: str | None = None,
-        **kwargs: Any,
-    ) -> Engine:
+    def get_engine(self, **kwargs: Any) -> Engine:
         """
         Return the engine optionally configured for a given catalog and namespace.
         """
-        if catalog:
-            kwargs["catalog"] = catalog
-        if namespace:
-            kwargs["namespace"] = namespace
-
         return self.load(data=kwargs)
+
+    @post_load
+    def _make_engine(  # pylint: disable=unused-argument
+        self,
+        data: dict[str, Any],
+        **kwargs: Any,
+    ) -> Engine:
+        """
+        Make an engine from the schema data.
+        """
+        return self.make_engine(data)
+
+    def make_engine(self, data: dict[str, Any]) -> Engine:
+        """
+        Actual implementation of `_make_engine`.
+        """
+        raise NotImplementedError("Subclasses must implement this method.")
