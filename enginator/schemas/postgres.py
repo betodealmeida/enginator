@@ -6,7 +6,7 @@ import ssl
 from enum import StrEnum
 from typing import Any
 
-from marshmallow import fields, post_load
+from marshmallow import fields
 from marshmallow.validate import Range
 from sqlalchemy.engine import Connection, Engine, create_engine
 from sqlalchemy.engine.url import URL
@@ -39,12 +39,14 @@ def build_ssl_value(data: dict[str, Any]) -> str:
     return "verify-full"
 
 
-def build_ssl_context(data: dict[str, Any]) -> ssl.SSLContext:
+def build_ssl_context(data: dict[str, Any]) -> ssl.SSLContext | None:
     """
     Build the SSL context for the connection.
     """
-    ssl_context = ssl.create_default_context()
+    if not data.get("require_ssl"):
+        return None
 
+    ssl_context = ssl.create_default_context()
     ssl_context.check_hostname = not data.get("disable_hostname_checking")
 
     if data.get("allow_self_signed_certificates"):
@@ -60,11 +62,12 @@ class PostgresDriver(StrEnum):
     Different drivers have different validation.
     """
 
-    PSYCOPG2 = "psycopg2"
-    PSYCOPG = "psycopg"
-    PG8000 = "pg8000"
-    ASYNCPG = "asyncpg"
-    PSYCOPG2CFFI = "psycopg2cffi"
+    # pylint: disable=invalid-name
+    psycopg2 = "psycopg2"
+    psycopg = "psycopg"
+    pg8000 = "pg8000"
+    asyncpg = "asyncpg"
+    psycopg2cffi = "psycopg2cffi"
 
 
 class PostgresSchema(BaseSchema):
@@ -90,7 +93,7 @@ class PostgresSchema(BaseSchema):
     driver = fields.Enum(
         PostgresDriver,
         required=False,
-        load_default=PostgresDriver.PSYCOPG2,
+        load_default=PostgresDriver.psycopg2,
         metadata={"description": "Database driver"},
     )
 
@@ -128,32 +131,32 @@ class PostgresSchema(BaseSchema):
     )
 
     @staticmethod
-    def get_catalogs(engine: Engine) -> list[str]:
+    def get_catalogs(engine: Engine) -> set[str]:
         """
         Return a list of databases.
         """
         with engine.connect() as connection:
-            return sorted(
+            return {
                 catalog
                 for (catalog,) in connection.execute(
                     text(
                         "SELECT datname FROM pg_database WHERE datistemplate = false;",
                     ),
                 )
-            )
+            }
 
     @staticmethod
-    def get_namespaces(engine: Engine) -> list[str]:
+    def get_namespaces(engine: Engine) -> set[str]:
         """
         Return a list of schemas.
         """
         with engine.connect() as connection:
-            return sorted(
+            return {
                 schema
                 for (schema,) in connection.execute(
                     text("SELECT schema_name FROM information_schema.schemata;"),
                 )
-            )
+            }
 
     @classmethod
     def match(cls, engine: str, driver: str | None = None) -> bool:
@@ -161,7 +164,6 @@ class PostgresSchema(BaseSchema):
             driver is None or driver in PostgresDriver.__members__.values()
         )
 
-    @post_load
     def make_engine(  # pylint: disable=unused-argument
         self,
         data: dict[str, Any],
@@ -173,17 +175,19 @@ class PostgresSchema(BaseSchema):
         parameters = {}
         query = {}
 
-        if data.get("require_ssl"):
-            if data["driver"] == PostgresDriver.ASYNCPG:
-                parameters["connect_args"] = {"ssl": build_ssl_context(data)}
-            elif data["driver"] in {
-                PostgresDriver.PSYCOPG,
-                PostgresDriver.PSYCOPG2,
-                PostgresDriver.PSYCOPG2CFFI,
-            }:
-                query["sslmode"] = build_ssl_value(data)
-            elif data["driver"] == PostgresDriver.PG8000:
-                parameters["connect_args"] = {"ssl_context": build_ssl_context(data)}
+        if data["driver"] == PostgresDriver.asyncpg:
+            parameters["connect_args"] = {"ssl": build_ssl_context(data)}
+        elif data["driver"] in {
+            PostgresDriver.psycopg,
+            PostgresDriver.psycopg2,
+            PostgresDriver.psycopg2cffi,
+        }:
+            query["sslmode"] = build_ssl_value(data)
+        elif data["driver"] == PostgresDriver.pg8000:
+            parameters["connect_args"] = {"ssl_context": build_ssl_context(data)}
+        else:
+            # should never happen due to Marshmallow validation
+            raise ValueError(f"Invalid driver: {data['driver']}")  # pragma: no cover
 
         url = URL(
             drivername=f"{data['engine']}+{data['driver']}",

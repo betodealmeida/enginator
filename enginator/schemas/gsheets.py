@@ -5,7 +5,7 @@ Google Sheets engine schema.
 from enum import StrEnum
 from typing import Any
 
-from marshmallow import Schema, fields, post_load
+from marshmallow import Schema, fields
 from sqlalchemy.engine import Engine, create_engine
 from sqlalchemy.engine.url import URL
 
@@ -17,7 +17,7 @@ class GSheetsDriver(StrEnum):
     Google Sheets drivers.
     """
 
-    APSW = "apsw"
+    apsw = "apsw"  # pylint: disable=invalid-name
 
 
 class GoogleServiceAccountInfoSchema(Schema):
@@ -57,7 +57,7 @@ class GSheetsSchema(BaseSchema):
     driver = fields.Enum(
         GSheetsDriver,
         required=False,
-        load_default=GSheetsDriver.APSW,
+        load_default=GSheetsDriver.apsw,
         metadata={"description": "Database driver"},
     )
 
@@ -80,24 +80,23 @@ class GSheetsSchema(BaseSchema):
     app_default_credentials = fields.Boolean(required=False)
 
     @staticmethod
-    def get_catalogs(engine: Engine) -> list[str]:
+    def get_catalogs(engine: Engine) -> set[str]:
         """
         Return a list of catalogs available in the engine.
         """
-        return []
+        return set()
 
     @staticmethod
-    def get_namespaces(engine: Engine) -> list[str]:
+    def get_namespaces(engine: Engine) -> set[str]:
         """
         Return a list of namespaces available in the engine.
         """
-        return ["main"]
+        return {"main"}
 
     @classmethod
     def match(cls, engine: str, driver: str | None = None) -> bool:
         return engine == "gsheets" and (driver is None or driver == "apsw")
 
-    @post_load
     def make_engine(  # pylint: disable=unused-argument
         self,
         data: dict[str, Any],
@@ -118,7 +117,7 @@ class GSheetsSchema(BaseSchema):
             host=None,
             port=None,
             database=None,
-            query=None,
+            query={},
         )
 
         return create_engine(url, **parameters)

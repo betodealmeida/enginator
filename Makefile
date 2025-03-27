@@ -1,13 +1,13 @@
 pyenv: .python-version
 
-.python-version: requirements/test.txt
+.python-version:
 	if [ -z "`pyenv virtualenvs | grep enginator`" ]; then\
 	    pyenv virtualenv enginator;\
 	fi
 	if [ ! -f .python-version ]; then\
 	    pyenv local enginator;\
 	fi
-	pip install -r requirements/test.txt
+	#pip install -r requirements/test.txt
 	touch .python-version
 
 test: pyenv
