@@ -36,7 +36,11 @@ def test_build_spec() -> None:
                         "type": {"default": "service_account"},
                         "project_id": {"type": "string"},
                         "private_key_id": {"type": "string"},
-                        "private_key": {"type": "string"},
+                        "private_key": {
+                            "description": "Private key",
+                            "type": "string",
+                            "x-ui-schema": {"ui:widget": "password"},
+                        },
                         "client_email": {"type": "string", "format": "email"},
                         "client_id": {"type": "string"},
                         "auth_uri": {"type": "string", "format": "url"},
@@ -95,6 +99,7 @@ def test_build_spec() -> None:
                         "access_token": {
                             "type": "string",
                             "description": "OAuth2 access token",
+                            "x-ui-schema": {"ui:widget": "password"},
                         },
                         "service_account_file": {
                             "type": "string",
@@ -108,7 +113,7 @@ def test_build_spec() -> None:
                                 },
                             ],
                         },
-                        "subject": {"type": "string"},
+                        "subject": {"type": "string", "format": "email"},
                         "app_default_credentials": {"type": "boolean"},
                     },
                 },
@@ -152,7 +157,11 @@ def test_build_spec() -> None:
                             "nullable": True,
                         },
                         "username": {"type": "string", "description": "Username"},
-                        "password": {"type": "string", "description": "Password"},
+                        "password": {
+                            "type": "string",
+                            "description": "Password",
+                            "x-ui-schema": {"ui:widget": "password"},
+                        },
                         "host": {
                             "type": "string",
                             "description": "Hostname or IP address",

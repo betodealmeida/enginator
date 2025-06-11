@@ -28,7 +28,13 @@ class GoogleServiceAccountInfoSchema(Schema):
     type = fields.Constant("service_account")
     project_id = fields.String(required=True)
     private_key_id = fields.String(required=True)
-    private_key = fields.String(required=True)
+    private_key = fields.String(
+        required=True,
+        metadata={
+            "description": "Private key",
+            "x-ui-schema": {"ui:widget": "password"},
+        },
+    )
     client_email = fields.Email(required=True)
     client_id = fields.String(required=True)
     auth_uri = fields.Url(required=True)
@@ -64,7 +70,10 @@ class GSheetsSchema(BaseSchema):
     # auth
     access_token = fields.String(
         required=False,
-        metadata={"description": "OAuth2 access token"},
+        metadata={
+            "description": "OAuth2 access token",
+            "x-ui-schema": {"ui:widget": "password"},
+        },
     )
     service_account_file = fields.String(
         required=False,
@@ -76,7 +85,7 @@ class GSheetsSchema(BaseSchema):
         metadata={"description": "Contents of service account JSON file"},
     )
 
-    subject = fields.String(required=False)
+    subject = fields.Email(required=False)
     app_default_credentials = fields.Boolean(required=False)
 
     @staticmethod

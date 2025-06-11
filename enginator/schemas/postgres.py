@@ -98,7 +98,10 @@ class PostgresSchema(BaseSchema):
     )
 
     username = fields.String(required=False, metadata={"description": "Username"})
-    password = fields.String(required=False, metadata={"description": "Password"})
+    password = fields.String(
+        required=False,
+        metadata={"description": "Password", "x-ui-schema": {"ui:widget": "password"}},
+    )
     host = fields.String(
         required=True,
         metadata={"description": "Hostname or IP address"},
